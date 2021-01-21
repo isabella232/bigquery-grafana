@@ -10,6 +10,6 @@ up:
 
 commands:
   build:
-    run: yarn run build:dev && env DOCKER_BUILDKIT=1 docker build -t grafana-bq -f docker/Dockerfile .
+    run: yarn run build:dev && env DOCKER_BUILDKIT=1 docker build -t grafana-bq -f docker/dev.Dockerfile .
   run-built:
     run: docker run -it -v $(pwd)/dist:/var/lib/grafana/plugins/bq-plugin -v $(pwd)/data:/var/lib/grafana:cached -p 3000:3000 grafana-bq
