@@ -460,7 +460,7 @@ export class BigQueryDatasource {
         q = this._updateAlias(q, modOptions, query.refId);
       }
       const limit = q.match(/[^]+(\bLIMIT\b)/gi);
-      if (limit == null) {
+      if (limit == null && !this.queryModel.target.disableLimit) {
         const limitStatement = ' LIMIT ' + options.maxDataPoints;
         const limitPosition = q.match(/\$__limitPosition/g);
         if (limitPosition !== null) {
