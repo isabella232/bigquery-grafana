@@ -116,6 +116,7 @@ export default class BigQueryQuery {
     target.timeColumn = target.timeColumn || '-- time --';
     target.timeColumnType = target.timeColumnType || 'TIMESTAMP';
     target.metricColumn = target.metricColumn || 'none';
+    target.disableLimit = target.disableLimit || false;
     target.group = target.group || [];
     target.where = target.where || [{ type: 'macro', name: '$__timeFilter', params: [] }];
     target.select = target.select || [[{ type: 'column', params: ['-- value --'] }]];
