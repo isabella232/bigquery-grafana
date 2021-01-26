@@ -118,6 +118,8 @@ func doQuery(ctx context.Context, query backend.DataQuery) backend.DataResponse 
 	rows, err := BigQueryRun(ctx, qm)
 	if err != nil {
 		log.DefaultLogger.Error("query BigQueryRun error %v", err)
+		response.Error = err
+		return response
 	}
 	// Log a warning if `Format` is empty.
 	if qm.Format == "" {
