@@ -21,7 +21,7 @@ type queryResult struct {
 	Values int64     `bigquery:"metric"`
 }
 
-// Transformed BigQuery results for Grafana
+// TransformedResults contains the results from BigQuery for Grafana
 type TransformedResults struct {
 	Time   []time.Time
 	Values []int64
@@ -79,25 +79,32 @@ func newDatasource() datasource.ServeOpts {
 }
 
 // QueryData handles multiple queries and returns multiple responses.
-// req contains the queries []DataQuery (where each query contains RefID as a unique identifer).
+// req contains the queries []DataQuery (where each query contains RefID as a unique identifier).
 // The QueryDataResponse contains a map of RefID to the response for each query, and each response
 // contains Frames ([]*Frame).
 func (td *SampleDatasource) QueryData(ctx context.Context, req *backend.QueryDataRequest) (*backend.QueryDataResponse, error) {
-	// create response struct
 	response := backend.NewQueryDataResponse()
+	results := make(chan func(backend.Responses), len(req.Queries))
 
-	// loop over queries and execute them individually.
+	// Execute the queries in parallel and collect the responses.
 	for _, q := range req.Queries {
-		res := td.query(ctx, q)
-		// save the response in a hashmap
-		// based on with RefID as identifier
-		response.Responses[q.RefID] = res
+		go func(dq backend.DataQuery) {
+			res := doQuery(ctx, dq)
+			results <- func(r backend.Responses) {
+				r[dq.RefID] = res
+			}
+		}(q)
+	}
+
+	// Update the underlying response map with the results of each query.
+	for fn := range results {
+		fn(response.Responses)
 	}
 
 	return response, nil
 }
 
-func (td *SampleDatasource) query(ctx context.Context, query backend.DataQuery) backend.DataResponse {
+func doQuery(ctx context.Context, query backend.DataQuery) backend.DataResponse {
 	// Unmarshal the json into our queryModel
 	var qm queryModel
 
@@ -144,29 +151,22 @@ func (td *SampleDatasource) CheckHealth(ctx context.Context, req *backend.CheckH
 	var status = backend.HealthStatusOk
 	var message = "Data source is working"
 
-	// if rand.Int()%2 == 0 {
-	// 	status = backend.HealthStatusError
-	// 	message = "randomized error123"
-	// }
-
 	return &backend.CheckHealthResult{
 		Status:  status,
 		Message: message,
 	}, nil
 }
 
-func newDataSourceInstance(setting backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
+func newDataSourceInstance(_ backend.DataSourceInstanceSettings) (instancemgmt.Instance, error) {
 	return &instanceSettings{
 		httpClient: &http.Client{},
 	}, nil
 }
 
-func (s *instanceSettings) Dispose() {
-	// Called before creatinga a new instance to allow plugin authors
-	// to cleanup.
-}
+// Dispose is called before creating a new instance to allow plugin authors to cleanup
+func (s *instanceSettings) Dispose() {}
 
-// BigQueryRun: Run the query againt BigQuery
+// BigQueryRun runs the query against BigQuery
 func BigQueryRun(ctx context.Context, query queryModel) (*TransformedResults, error) {
 	projectID := query.Project
 	var tr TransformedResults
@@ -182,7 +182,6 @@ func BigQueryRun(ctx context.Context, query queryModel) (*TransformedResults, er
 	q.Location = query.Location
 	// Run the query and print results when the query job is completed.
 	job, err := q.Run(ctx)
-
 	if err != nil {
 		log.DefaultLogger.Info("Query run error: %v\n", err)
 		return nil, err
@@ -198,13 +197,9 @@ func BigQueryRun(ctx context.Context, query queryModel) (*TransformedResults, er
 	}
 	it, err := job.Read(ctx)
 
-	// rows := make([][]bigquery.Value, 0)
 	for {
 		var row queryResult
-		// var row []bigquery.Value
-		// row := make(map[string]bigquery.Value)
-
-		err := it.Next(&row)
+		err = it.Next(&row)
 		if err == iterator.Done {
 			break
 		}
